@@ -1,0 +1,6 @@
+{
+  "name": "Simulasi Mengemudi Bus Edukatif Indonesia",
+  "description": "Video simulasi mengemudi sudut pandang orang pertama (First-Person POV) yang realistis dan edukatif di jalan raya Indonesia untuk Papan Interaktif Digital (PID).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
