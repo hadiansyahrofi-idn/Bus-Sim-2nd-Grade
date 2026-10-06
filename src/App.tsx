@@ -27,8 +27,10 @@ interface ActiveSignPopup {
  */
 export default function App() {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [hasStarted, setHasStarted] = useState(false);
   const [activeSignPopup, setActiveSignPopup] = useState<ActiveSignPopup | null>(null);
   const [isJourneyFinished, setIsJourneyFinished] = useState(false);
+  const startTriggerRef = useRef<(() => void) | null>(null);
   const restartTriggerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -129,10 +131,23 @@ export default function App() {
 
     let halteFinalStopped = false; // Scene 21: Final calm stop at Halte Bus
     let halteCompleteNotified = false;
+    let simulationRunning = false; // Waits at Scene 1 until user clicks "Mulai Simulasi"
 
     let prevTime = performance.now();
     let elapsedTotal = 0;
     let animFrameId = 0;
+
+    // Position the bus at Scene 1 start point immediately so the 3D cabin & road are visible behind the title screen
+    const initSample = director.sampleAtDistance(0);
+    cockpit.rootGroup.position.copy(initSample.position);
+    cockpit.rootGroup.lookAt(initSample.position.clone().add(initSample.tangent));
+
+    // Register start function so clicking "Mulai Simulasi" begins the journey and activates audio
+    startTriggerRef.current = () => {
+      simulationRunning = true;
+      setHasStarted(true);
+      soundEngine.initAndResume();
+    };
 
     // Register restart function so clicking "Ulangi dari Awal" smoothly resets the entire journey
     restartTriggerRef.current = () => {
@@ -152,8 +167,10 @@ export default function App() {
       spbuRefuelCompleted = false;
       halteFinalStopped = false;
       halteCompleteNotified = false;
+      simulationRunning = true;
       setActiveSignPopup(null);
       setIsJourneyFinished(false);
+      setHasStarted(true);
       soundEngine.initAndResume();
     };
 
@@ -165,6 +182,12 @@ export default function App() {
 
       // Keep sky dome centered on bus
       skyDome.position.copy(cockpit.rootGroup.position);
+
+      // If waiting on the intro screen before "Mulai Simulasi" is clicked, render subtle idle cabin view
+      if (!simulationRunning) {
+        renderer.render(scene, cockpit.camera);
+        return;
+      }
 
       // ========================================================================
       // CHECK IF BUS REACHED AN EDUCATIONAL TRAFFIC SIGN PAUSE CHECKPOINT
@@ -218,23 +241,23 @@ export default function App() {
       const sample = director.sampleAtDistance(currentS);
 
       // ========================================================================
-      // DETERMINE TARGET SPEED & BEHAVIOR FOR ALL 21 SCENES (REALISTIC BRISK DRIVE)
+      // DETERMINE TARGET SPEED & BEHAVIOR FOR ALL 21 SCENES (FASTER & SMOOTH TURNS)
       // ========================================================================
-      let targetSpeed = 24.5; // Brisk, realistic highway/arterial cruising speed (~88 km/h visual pace)
+      let targetSpeed = 29.5; // Faster realistic cruising speed
       let blinker: 'off' | 'left' | 'right' = 'off';
       let isRefueling = false;
 
-      // SCENE 1: Mulai Perjalanan (Engine running, gentle start from stationary)
+      // SCENE 1: Mulai Perjalanan (Quick, responsive launch once Mulai Simulasi is clicked)
       if (currentS < 6) {
         startEngineIdleTimer += dt;
-        if (startEngineIdleTimer < 1.8) {
-          targetSpeed = 0;
+        if (startEngineIdleTimer < 0.8) {
+          targetSpeed = 8.0;
         } else {
-          targetSpeed = 14.0;
+          targetSpeed = 18.5;
           blinker = 'right'; // Pulling out into lane
         }
       } else if (currentS < 45) {
-        targetSpeed = 19.0;
+        targetSpeed = 24.0;
       }
 
       // Smoothly decelerate just before reaching the next unvisited traffic sign pause point
@@ -242,29 +265,29 @@ export default function App() {
         if (!completedSignIds.has(cp.id)) {
           const distToPause = cp.pauseS - currentS;
           if (distToPause > 0 && distToPause < 32) {
-            targetSpeed = Math.min(targetSpeed, Math.max(7.5, (distToPause / 32) * 22.0));
+            targetSpeed = Math.min(targetSpeed, Math.max(9.5, (distToPause / 32) * 26.0));
           }
           break;
         }
       }
 
       // SCENE 2 (Belok Kanan), SCENE 3 (Belok Kiri), SCENE 4 (U-Turn), SCENE 10 (Jalan Berkelok)
-      // Automatically slow down smoothly for curves & activate matching turn signal
+      // Keep a brisk, natural turning speed (~21.5 m/s) so turns never feel sluggish
       const absCurve = Math.abs(sample.curvature);
       if (absCurve > 0.16) {
-        targetSpeed = Math.min(targetSpeed, 14.5);
+        targetSpeed = Math.min(targetSpeed, 21.5);
         if (sample.curvature > 0.2) blinker = 'right';
         if (sample.curvature < -0.2) blinker = 'left';
       }
 
-      // SCENE 8: Turunan (Slow down before and during downhill grade for safety)
+      // SCENE 8: Turunan (Controlled brisk downhill grade)
       if (sample.pitchSlope < -0.04) {
-        targetSpeed = Math.min(targetSpeed, 16.5);
+        targetSpeed = Math.min(targetSpeed, 21.0);
       }
 
-      // SCENE 9: Tanjakan (Steady, stable uphill climb with heavier engine load)
+      // SCENE 9: Tanjakan (Steady uphill climb with heavier engine load)
       if (sample.pitchSlope > 0.04) {
-        targetSpeed = Math.min(targetSpeed, 15.5);
+        targetSpeed = Math.min(targetSpeed, 19.5);
       }
 
       // ========================================================================
@@ -523,7 +546,11 @@ export default function App() {
   }, []);
 
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-black overflow-hidden select-none cursor-none">
+    <div
+      className={`fixed inset-0 w-screen h-screen bg-black overflow-hidden select-none ${
+        !hasStarted || isJourneyFinished ? 'cursor-default' : 'cursor-none'
+      }`}
+    >
       {/* Pure 16:9 First-Person Bus Windshield Viewport */}
       <div ref={containerRef} className="w-full h-full relative" />
 
@@ -533,8 +560,42 @@ export default function App() {
         className="pointer-events-none fixed inset-0 bg-gradient-to-b from-slate-950/30 via-transparent to-black/15"
       />
 
+      {/* Initial Title & Description Overlay with "Mulai Simulasi" Button */}
+      {!hasStarted && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center p-6 bg-slate-950/65 backdrop-blur-sm transition-opacity duration-200">
+          <div className="w-full max-w-2xl bg-slate-900/95 border border-white/15 rounded-2xl p-8 md:p-10 text-center text-white shadow-2xl space-y-6">
+            <div className="space-y-3">
+              <div className="flex items-center justify-center gap-2 text-xs font-semibold tracking-widest text-sky-400">
+                <span>MEDIA PEMBELAJARAN INTERAKTIF</span>
+                <span aria-hidden="true">·</span>
+                <span>PAPAN INTERAKTIF DIGITAL (PID)</span>
+              </div>
+              <h1 className="text-2xl md:text-4xl font-semibold tracking-tight text-white">
+                Simulator Mengemudi Bus & Edukasi Rambu Lalu Lintas Indonesia
+              </h1>
+              <p className="text-sm md:text-base text-slate-300 leading-relaxed pt-1 max-w-xl mx-auto">
+                Melalui simulasi sudut pandang pengemudi (<em>first-person view</em>) ini, siswa
+                diajak mengamati perjalanan bus kota di jalan raya Indonesia secara langsung. Setiap
+                kali rambu lalu lintas muncul, simulasi akan berhenti sejenak untuk menampilkan arti
+                rambu serta bagaimana pengemudi bus mematuhinya dengan tertib dan aman.
+              </p>
+            </div>
+
+            <div className="pt-2 flex justify-center">
+              <button
+                type="button"
+                onClick={() => startTriggerRef.current?.()}
+                className="px-8 py-3.5 bg-sky-500 hover:bg-sky-400 active:bg-sky-600 text-slate-950 font-semibold text-base rounded-xl shadow-lg transition-colors whitespace-nowrap cursor-pointer"
+              >
+                Mulai Simulasi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Automatic Educational Traffic Sign Overlay (Only Sign Image + Name + Explanation) */}
-      {activeSignPopup && (
+      {activeSignPopup && !isJourneyFinished && (
         <div className="pointer-events-none fixed inset-0 z-20 flex items-center justify-end pr-8 md:pr-14 lg:pr-20 bg-slate-950/30 backdrop-blur-[2px] transition-opacity duration-200">
           <div className="w-full max-w-xl bg-slate-900/95 border border-white/15 rounded-2xl p-6 md:p-8 text-white shadow-2xl">
             <div className="flex items-center gap-6">
@@ -560,6 +621,37 @@ export default function App() {
                   {activeSignPopup.eduData.description}
                 </p>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Congratulations & Restart Modal at Final Stop (Halte Bus) */}
+      {isJourneyFinished && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center p-6 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-200">
+          <div className="w-full max-w-lg bg-slate-900/95 border border-white/15 rounded-2xl p-8 text-center text-white shadow-2xl space-y-6">
+            <div className="space-y-2">
+              <div className="text-xs font-semibold tracking-widest text-emerald-400">
+                PERJALANAN EDUKASI SELESAI
+              </div>
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-white">
+                Selamat, Siswa Hebat!
+              </h1>
+              <p className="text-sm md:text-base text-slate-300 leading-relaxed pt-1">
+                Kamu telah berhasil menyelesaikan seluruh perjalanan simulasi mengemudi bus dengan
+                tertib, aman, dan mematuhi seluruh rambu lalu lintas Indonesia hingga tiba dengan
+                selamat di Halte Bus.
+              </p>
+            </div>
+
+            <div className="pt-2 flex justify-center">
+              <button
+                type="button"
+                onClick={() => restartTriggerRef.current?.()}
+                className="px-6 py-3 bg-sky-500 hover:bg-sky-400 active:bg-sky-600 text-slate-950 font-semibold text-sm md:text-base rounded-xl shadow-lg transition-colors whitespace-nowrap cursor-pointer"
+              >
+                Ulangi dari Awal
+              </button>
             </div>
           </div>
         </div>

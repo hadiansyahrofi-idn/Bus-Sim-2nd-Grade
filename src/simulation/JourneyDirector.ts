@@ -45,13 +45,18 @@ export class JourneyDirector {
       [-382, 0, 500],
       [-382, 0, 620],
 
-      // SCENE 4: Rambu Putar Balik / U-Turn (Heading +Z -> Wide 180 U-Turn to the RIGHT (-X) at Z=740 -> heading -Z)
-      [-382, 0, 720],
-      [-390, 0, 775],
-      [-436, 0, 800],
-      [-482, 0, 775],
-      [-490, 0, 720],
-      [-490, 0, 580],
+      // SCENE 4: Rambu Putar Balik / U-Turn (Heading +Z -> True semicircular 180-deg U-shape curve to the RIGHT (-X) -> heading -Z)
+      // Center of the U-turn semicircle is at (-436, 0, 720) with radius R = 54m:
+      [-382, 0, 680],
+      [-382, 0, 720], // 0 deg entry
+      [-389.2, 0, 747], // 30 deg along semicircle
+      [-409, 0, 766.8], // 60 deg along semicircle
+      [-436, 0, 774], // 90 deg apex of the 'U'
+      [-463, 0, 766.8], // 120 deg along semicircle
+      [-482.8, 0, 747], // 150 deg along semicircle
+      [-490, 0, 720], // 180 deg exit
+      [-490, 0, 660],
+      [-490, 0, 560],
 
       // SCENE 5: Rambu Dilarang Parkir (Busy Ruko Commercial District, heading -Z, well-spaced straight avenue)
       [-490, 0, 420],

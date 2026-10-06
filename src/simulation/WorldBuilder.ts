@@ -368,7 +368,7 @@ export function buildIndonesianEnvironment(
   // ============================================================================
   const sScene2Turn = director.findClosestS(new THREE.Vector3(0, 0, 310), 0.02, 0.12);
   const sScene3Turn = director.findClosestS(new THREE.Vector3(-350, 0, 342), 0.08, 0.22);
-  const sScene4UTurn = director.findClosestS(new THREE.Vector3(-382, 0, 720), 0.14, 0.28);
+  const sScene4UTurn = director.findClosestS(new THREE.Vector3(-382, 0, 680), 0.12, 0.28);
   const sScene5NoPark = director.findClosestS(new THREE.Vector3(-490, 0, 420), 0.22, 0.36);
   const sScene6NoRight = director.findClosestS(new THREE.Vector3(-490, 0, 60), 0.28, 0.42);
   const sScene7NoLeft = director.findClosestS(new THREE.Vector3(-490, 0, -240), 0.32, 0.48);
