@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { BusSoundEngine } from './audio/BusSoundEngine';
+import { EndLearningModal, IntroModal } from './components/LearningPanels';
 import { createBusCockpitRig } from './simulation/BusCockpit';
 import { JourneyDirector } from './simulation/JourneyDirector';
 import {
@@ -141,6 +142,8 @@ export default function App() {
     const initSample = director.sampleAtDistance(0);
     cockpit.rootGroup.position.copy(initSample.position);
     cockpit.rootGroup.lookAt(initSample.position.clone().add(initSample.tangent));
+    // Set speedometer needle to 0 km/h (+2.356 rad)
+    cockpit.speedometerNeedlePivot.rotation.z = (135 * Math.PI) / 180;
 
     // Register start function so clicking "Mulai Simulasi" begins the journey and activates audio
     startTriggerRef.current = () => {
@@ -215,6 +218,13 @@ export default function App() {
       // If currently paused for a traffic sign educational explanation:
       if (activePauseCheckpoint) {
         signPauseTimer += dt;
+        // Smoothly settle analog speedometer needle to 0 km/h while paused
+        const zeroAngleRad = (135 * Math.PI) / 180;
+        cockpit.speedometerNeedlePivot.rotation.z = THREE.MathUtils.lerp(
+          cockpit.speedometerNeedlePivot.rotation.z,
+          zeroAngleRad,
+          Math.min(1, dt * 8)
+        );
         // Keep engine idling gently while paused so audio feels natural
         soundEngine.update({
           speedKmh: 0,
@@ -486,6 +496,16 @@ export default function App() {
       // Rotate physical steering wheel smoothly matching road curvature
       cockpit.steeringWheelGroup.rotation.z = smoothedSteer * 1.65;
 
+      // Rotate physical analog speedometer needle accurately reflecting current speed in km/h (0 - 120 km/h scale)
+      // Realistic city bus speed display (mapping simulation speed to realistic 0 - 80 km/h city bus speed range)
+      const displayedKmh = THREE.MathUtils.clamp(currentSpeed * 2.4, 0, 120);
+      const needleAngleRad = ((135 - (displayedKmh / 120) * 270) * Math.PI) / 180;
+      cockpit.speedometerNeedlePivot.rotation.z = THREE.MathUtils.lerp(
+        cockpit.speedometerNeedlePivot.rotation.z,
+        needleAngleRad,
+        Math.min(1, dt * 10)
+      );
+
       // Blink physical turn signal indicator LEDs on dashboard binnacle
       const blinkOn = Math.floor(elapsedTotal / 0.42) % 2 === 0;
       cockpit.leftBlinkerMat.emissiveIntensity = blinker === 'left' && blinkOn ? 2.5 : 0;
@@ -560,39 +580,8 @@ export default function App() {
         className="pointer-events-none fixed inset-0 bg-gradient-to-b from-slate-950/30 via-transparent to-black/15"
       />
 
-      {/* Initial Title & Description Overlay with "Mulai Simulasi" Button */}
-      {!hasStarted && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center p-6 bg-slate-950/65 backdrop-blur-sm transition-opacity duration-200">
-          <div className="w-full max-w-2xl bg-slate-900/95 border border-white/15 rounded-2xl p-8 md:p-10 text-center text-white shadow-2xl space-y-6">
-            <div className="space-y-3">
-              <div className="flex items-center justify-center gap-2 text-xs font-semibold tracking-widest text-sky-400">
-                <span>MEDIA PEMBELAJARAN INTERAKTIF</span>
-                <span aria-hidden="true">·</span>
-                <span>PAPAN INTERAKTIF DIGITAL (PID)</span>
-              </div>
-              <h1 className="text-2xl md:text-4xl font-semibold tracking-tight text-white">
-                Simulator Mengemudi Bus & Edukasi Rambu Lalu Lintas Indonesia
-              </h1>
-              <p className="text-sm md:text-base text-slate-300 leading-relaxed pt-1 max-w-xl mx-auto">
-                Melalui simulasi sudut pandang pengemudi (<em>first-person view</em>) ini, siswa
-                diajak mengamati perjalanan bus kota di jalan raya Indonesia secara langsung. Setiap
-                kali rambu lalu lintas muncul, simulasi akan berhenti sejenak untuk menampilkan arti
-                rambu serta bagaimana pengemudi bus mematuhinya dengan tertib dan aman.
-              </p>
-            </div>
-
-            <div className="pt-2 flex justify-center">
-              <button
-                type="button"
-                onClick={() => startTriggerRef.current?.()}
-                className="px-8 py-3.5 bg-sky-500 hover:bg-sky-400 active:bg-sky-600 text-slate-950 font-semibold text-base rounded-xl shadow-lg transition-colors whitespace-nowrap cursor-pointer"
-              >
-                Mulai Simulasi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Engaging Initial Screen for Grade 2 SD Students */}
+      {!hasStarted && <IntroModal onStart={() => startTriggerRef.current?.()} />}
 
       {/* Automatic Educational Traffic Sign Overlay (Only Sign Image + Name + Explanation) */}
       {activeSignPopup && !isJourneyFinished && (
@@ -626,35 +615,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Congratulations & Restart Modal at Final Stop (Halte Bus) */}
+      {/* Interactive End Screen: Newly Learned Signs, Grade 2 SD Quiz & 4P Reflection */}
       {isJourneyFinished && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center p-6 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-200">
-          <div className="w-full max-w-lg bg-slate-900/95 border border-white/15 rounded-2xl p-8 text-center text-white shadow-2xl space-y-6">
-            <div className="space-y-2">
-              <div className="text-xs font-semibold tracking-widest text-emerald-400">
-                PERJALANAN EDUKASI SELESAI
-              </div>
-              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-white">
-                Selamat, Siswa Hebat!
-              </h1>
-              <p className="text-sm md:text-base text-slate-300 leading-relaxed pt-1">
-                Kamu telah berhasil menyelesaikan seluruh perjalanan simulasi mengemudi bus dengan
-                tertib, aman, dan mematuhi seluruh rambu lalu lintas Indonesia hingga tiba dengan
-                selamat di Halte Bus.
-              </p>
-            </div>
-
-            <div className="pt-2 flex justify-center">
-              <button
-                type="button"
-                onClick={() => restartTriggerRef.current?.()}
-                className="px-6 py-3 bg-sky-500 hover:bg-sky-400 active:bg-sky-600 text-slate-950 font-semibold text-sm md:text-base rounded-xl shadow-lg transition-colors whitespace-nowrap cursor-pointer"
-              >
-                Ulangi dari Awal
-              </button>
-            </div>
-          </div>
-        </div>
+        <EndLearningModal onRestart={() => restartTriggerRef.current?.()} />
       )}
     </div>
   );
